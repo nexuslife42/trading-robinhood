@@ -61,6 +61,9 @@ Use a new destination each time. Keep backups encrypted and outside Git. Stop th
 
 1. Open a topic PR into staging. Inspect the change and run all required checks. Merge only after they pass.
 2. Open staging → main. The merge candidate must pass all four checks again. Resolve review findings before merging.
+
+Because main receives a merge commit, later topic branches must also merge the latest `origin/main` before their staging PR (see README). If a release PR is behind main, create `chore/sync-main` from current staging, merge `origin/main`, and submit that branch through the normal staging checks. Do not weaken the up-to-date gate or force-push staging.
+
 3. Check out the exact main commit in a clean workspace. Build and smoke-test the wheel with locked runtime dependencies in a separate environment:
 
 ```sh
