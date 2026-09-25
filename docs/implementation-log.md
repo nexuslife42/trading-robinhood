@@ -45,3 +45,11 @@ The first GitHub run passed simulation, security and branch-flow but failed Linu
 - Final Ruling: exchange realism remains limited to the documented simulator assumptions. Replay verifies this model and cannot establish real fill quality or performance.
 
 Feature PR: https://github.com/nexuslife42/trading-robinhood/pull/1. Required CI is rerun after the review fixes. No Robinhood login, real account data, or real order has been used. No merge activates trading.
+
+## Release handoff verification (2026-09-24, America/New_York)
+
+- Confirmed feature PR #1 merged into staging at `9983e080ddd2c2c342ff2ed6d23d53062778cab8`. Release PR #2 is open; its original candidate passed all four required checks. The documentation branch explains how future topic branches include main's release history without bypassing protections.
+- Rechecked both remote branch protections: four required checks, strict up-to-date enforcement, PRs, resolved conversations, administrator enforcement, and no force pushes or deletion. Public visibility, secret scanning, push protection, and dependency alerts remain enabled.
+- Fresh local verification on the documentation branch passed: locked dependency sync, 72 tests, Ruff lint/format, strict mypy, synthetic replay ($979 cash and two SYNTH shares), dependency audit, and full-history Gitleaks. No application behavior changed during this handoff.
+- Final promotion evidence will be stored locally in `artifacts/RELEASE_ID-release-record.md`, alongside the exact main commit's disabled-policy manifest and built wheel checksum. This avoids changing the source commit merely to record its own final hash. The record must link the successful release PR and main CI run; it does not grant live authority.
+- The user-reported Codex context-window settings and VS Code's effective context window were not verified during release promotion. No machine-wide settings were changed.
