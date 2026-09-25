@@ -21,6 +21,16 @@ Topic branch → pull request into `staging` → tests and review → release pu
 
 Use `feat/`, `fix/`, `chore/`, `docs/`, or `test/` names. Both protected branches require `quality`, `simulation`, `security`, and `branch-flow`. Administrators are subject to these rules. A merge never starts a trading process.
 
+Start a change from staging and include the latest main history:
+
+```sh
+git fetch origin
+git switch -c feat/your-change origin/staging
+git merge origin/main
+```
+
+The merge is often a no-op. After a release, it brings main's release commit into your topic branch so the next staging → main PR can satisfy the up-to-date requirement. Resolve any conflicts on the topic branch, run the checks, and open its PR into staging. Never push directly to either protected branch.
+
 The repository is **public at the owner's explicit request** so GitHub Free can enforce protections. Commit only code, instructions, synthetic fixtures, and sanitized schemas. Account data, tokens, runtime state, local logs, and private datasets must never enter Git, CI artifacts, issues, or PRs.
 
 ## What works
