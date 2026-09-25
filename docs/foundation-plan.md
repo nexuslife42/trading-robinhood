@@ -1,10 +1,10 @@
 # Approved foundation plan
 
-Approved in conversation on 2026-09-24. User confirmed implementation after installing Git 2.54.0. The binding choices are private GitHub, the current macOS user/workspace, and approval of every real order.
+Approved in conversation on 2026-09-24. User confirmed implementation after installing Git 2.54.0. The user subsequently chose PUBLIC GitHub under nexuslife42 to obtain enforced branch protections without Pro. Other binding choices remain the current macOS user/workspace and approval of every real order.
 
 ## Deliverables
 
-1. Reproducible Python 3.13 / uv package, private GitHub, feature/staging/main workflow, required CI, VS Code tasks, AGENTS.md and focused skills.
+1. Reproducible Python 3.13 / uv package, public GitHub (owner's revised choice), feature/staging/main workflow, required CI, VS Code tasks, AGENTS.md and a focused workflow skill.
 2. Typed broker interfaces, decimal-safe policy, persistent approvals/order events, fail-closed execution and deterministic paper/replay harness.
 3. Official Robinhood MCP connection with Keychain OAuth, authenticated schema discovery, explicitly allowlisted reads/previews, and sanitized data. No undocumented account access or live testing.
 4. Operator-only approval, release integrity verification, halt/reconciliation/recovery commands and tests. No live activation as part of development.
@@ -29,7 +29,9 @@ BrokerAdapter: capabilities, snapshot, quote, preview, submit, cancel, and looku
 
 ## External gates
 
-GitHub authentication and eligible private branch protection must be verified. Robinhood OAuth onboarding is completed by the human in a browser; authenticated capability schemas and account permissions are not available during offline development. Missing external evidence keeps live execution disabled, not guessed.
+GitHub authentication and enforced branch protection must be verified. Robinhood OAuth onboarding is completed by the human in a browser; authenticated capability schemas and account permissions are not available during offline development. Missing external evidence keeps live execution disabled, not guessed.
+
+The initial implementation provides the OAuth/discovery mechanism and a tested schema-pinned public-market client. Authenticated discovery, account filters, broker previews, and real order adapters remain gated until the owner connects and actual contracts can be verified. No schemas or account permissions are guessed to close this external gate.
 
 ## Research
 

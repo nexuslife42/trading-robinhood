@@ -1,0 +1,13 @@
+# Explicit synthetic example, not a trading recommendation.
+version = "1"
+mode = "paper"
+live_enabled = false
+accounts = ["paper"]
+instruments = ["SYNTH"]
+max_order_value = "100"
+max_daily_value = "200"
+max_daily_orders = 3
+max_open_orders = 2
+fee_buffer = "1"
+max_data_age_seconds = 30
+approval_ttl_seconds = 60
