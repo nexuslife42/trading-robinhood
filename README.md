@@ -36,7 +36,7 @@ The repository is **public at the owner's explicit request** so GitHub Free can 
 ## What works
 
 - Decimal-safe validation, a deny-all default policy, exact-order approvals, pending exposure limits, and durable SQLite order events.
-- Paper limit orders, partial fills, cancellations, fees, slippage, and simplified sale settlement.
+- Paper limit orders, partial fills, cancellations, fees, slippage, and simplified sale settlement. `rh paper-tick` advances synthetic ticks in an existing ledger after operator approval.
 - Replay of timestamped fixtures with source/adjustment/license metadata and no future-tick access.
 - A credential-free MCP server for paper proposals and status, with no approval or submission tool.
 - An explicit Robinhood OAuth/Keychain discovery command and a schema-pinned public-market read client. No tools are pre-approved.

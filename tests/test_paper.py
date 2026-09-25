@@ -91,3 +91,38 @@ def test_paper_state_survives_restart_and_initial_cash_is_not_reset(state):
     assert restarted.snapshot(NOW).buying_power == Decimal("80")
     assert restarted.snapshot(NOW).positions["SYNTH"] == Decimal("2")
     restarted.state.close()
+
+
+def test_repeated_tick_cannot_supply_more_liquidity_after_restart(state):
+    broker = PaperBroker(state, account="paper", cash=Decimal("100"), fee=Decimal("1"))
+    broker.set_quote(quote())
+    broker.submit(order(), NOW)
+    tick = quote(observed_at=NOW + timedelta(seconds=2))
+    broker.advance(tick, Decimal("1"))
+    restarted = PaperBroker(State(state.path), account="paper", cash=Decimal("100"))
+    try:
+        for at in [tick.observed_at, NOW + timedelta(seconds=1)]:
+            with pytest.raises(ValueError, match="Tick time"):
+                restarted.advance(quote(observed_at=at), Decimal("1"))
+        assert restarted.lookup(str(order().request_id), NOW).filled_quantity == Decimal("1")
+        assert restarted.snapshot(NOW).buying_power == Decimal("89")
+    finally:
+        restarted.state.close()
+
+
+def test_failed_tick_rolls_back_quote_fills_and_tick_timestamp(state, monkeypatch):
+    broker = PaperBroker(state, account="paper", cash=Decimal("100"))
+    broker.set_quote(quote())
+    broker.submit(order(), NOW)
+    tick = quote(observed_at=NOW + timedelta(seconds=1))
+
+    def fail_save(*args):
+        raise OSError("simulated storage failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(broker, "_save", fail_save)
+        with pytest.raises(OSError):
+            broker.advance(tick, Decimal("1"))
+    assert broker.quote("SYNTH", NOW) == quote()
+    assert broker.lookup(str(order().request_id), NOW).filled_quantity == 0
+    assert broker.advance(tick, Decimal("1"))[0].filled_quantity == 1

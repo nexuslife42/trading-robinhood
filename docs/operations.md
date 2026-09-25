@@ -24,7 +24,26 @@ uv run rh approve-execute ORDER_ID --state .state/paper.sqlite3 --policy config/
 uv run rh status --state .state/paper.sqlite3
 ```
 
-Approval requires an interactive terminal and typing the displayed order ID and digest. It covers the exact proposal, preview, policy, and release, expires after 60 seconds by default, and is consumed before submission. It cannot be piped in or supplied as an agent tool. Starting a new executor clears unused approvals. Use the replay harness to advance fake market ticks and verify fills; the interactive commands do not fetch live quotes or run a background market feed.
+Approval requires an interactive terminal and typing the displayed order ID and digest. It covers the exact proposal, preview, policy, and release, expires after 60 seconds by default, and is consumed before submission. It cannot be piped in or supplied as an agent tool. Starting a new executor clears unused approvals. The interactive commands do not fetch live quotes or run a background market feed.
+
+After approval and submission, advance the **same ledger** with a synthetic tick:
+
+```sh
+uv run rh paper-tick tick.json --state .state/paper.sqlite3
+uv run rh history ORDER_ID --state .state/paper.sqlite3
+```
+
+The tick file uses the replay tick format. For example:
+
+```json
+{"at":"2026-09-25T14:00:01Z","instrument":"SYNTH","bid":"9","ask":"10","liquidity":"1"}
+```
+
+Choose a timezone-aware timestamp after submission on the same UTC day. A later day expires DAY orders. Each tick supplies a shared maximum number of shares (`liquidity`) and must have a strictly later timestamp than the previous tick for that instrument. Repeating a tick fails, including after a restart. Use decimal strings for prices and quantities. `tradable` and `market_open` default to true; set either to false to prevent fills.
+
+`paper-tick` requires an explicit ledger path, never approves or submits orders, and reports updated orders and the simulated portfolio. Already submitted orders can fill while halted, just as halt does not cancel them. Proposals cannot fill. With two one-share ticks at $10, a two-share buy starting from $1,000 ends at $979 and two shares, including the $1 order fee. The default connected MCP server still uses the deny-all policy; a rehearsal server must be started explicitly with `--policy config/paper.toml` and the same ledger path. No new MCP tools are added.
+
+The simulator commits each tick and its balances together before updating executor history. If the command is interrupted after that commit, do not invent a new tick to retry it: use `history` and `reconcile` for the affected orders first. Their authoritative simulated fills remain in the ledger. The replay command continues to use its own temporary ledger and does not advance this one.
 
 Status, history, and backup commands preserve existing approvals and halt state. They do not start an executor or reconcile orders.
 

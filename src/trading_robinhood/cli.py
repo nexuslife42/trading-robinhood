@@ -15,7 +15,7 @@ from .execution import ExecutionError, Executor
 from .models import OrderIntent, Policy, Quote
 from .paper import PaperBroker
 from .release import build_manifest, verify_manifest
-from .replay import replay
+from .replay import Tick, replay
 from .state import State
 
 
@@ -43,6 +43,10 @@ def parser() -> argparse.ArgumentParser:
     )
     replay_parser = commands.add_parser("replay")
     replay_parser.add_argument("dataset", type=Path)
+    tick_parser = commands.add_parser("paper-tick", help="Apply one synthetic market tick")
+    tick_parser.add_argument("file", type=Path)
+    tick_parser.add_argument("--state", type=Path, required=True)
+    tick_parser.add_argument("--policy", type=Path)
     for name in (
         "status",
         "history",
@@ -187,7 +191,22 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             executor = Executor(state, broker, policy, release="development-paper")
             now = datetime.now(UTC)
-            if args.command == "propose":
+            if args.command == "paper-tick":
+                tick = Tick.model_validate_json(args.file.read_text())
+                quote = Quote(
+                    observed_at=tick.at,
+                    **tick.model_dump(exclude={"at", "liquidity"}),
+                )
+                results, portfolio = executor.advance_paper(quote, tick.liquidity)
+                output(
+                    {
+                        "mode": "paper",
+                        "at": tick.at,
+                        "results": [result.model_dump(mode="json") for result in results],
+                        "portfolio": portfolio.model_dump(mode="json"),
+                    }
+                )
+            elif args.command == "propose":
                 key = executor.propose(OrderIntent.model_validate_json(args.file.read_text()), now)
                 output(executor.review(key, now))
             elif args.command == "approve-execute":
