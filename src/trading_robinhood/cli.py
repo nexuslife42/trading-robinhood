@@ -96,7 +96,14 @@ def main(argv: list[str] | None = None) -> int:
                 )
             from .connection import discover
 
-            document = asyncio.run(discover())
+            try:
+                document = asyncio.run(discover())
+            except Exception:
+                # SDK validation and transport errors may embed tokens or response bodies.
+                raise ExecutionError(
+                    "Broker discovery failed; no tools were enabled. "
+                    "Check the connection and authorization in your operator terminal."
+                ) from None
             args.output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             descriptor = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(descriptor, "w") as stream:
@@ -113,7 +120,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "broker-logout":
             from .connection import KeychainStore
 
-            KeychainStore().clear()
+            try:
+                KeychainStore().clear()
+            except Exception:
+                raise ExecutionError("Broker logout failed; check macOS Keychain access") from None
             output({"local_credentials_removed": True, "broker_revocation_required": True})
             return 0
         if args.command == "replay":

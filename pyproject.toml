@@ -12,6 +12,7 @@ dependencies = [
   "mcp>=2.2,<3",
   "httpx2>=2.13,<3",
   "jsonschema>=4.23,<5",
+  "referencing>=0.37,<1",
   "keyring>=25.6,<26",
 ]
 

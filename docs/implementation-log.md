@@ -21,14 +21,27 @@
 ## Verification evidence (2026-09-24)
 
 - Module tests were introduced before implementation; missing-module failures preceded working code. Restart approval invalidation and status/backup preservation regressions failed before their fixes. The history command was added after its missing-command test failed.
-- 64 tests pass locally, including approval mutation/expiry/replay, timeout after acceptance, crash before recording, storage failure, concurrent dispatch lock, fill/cancel races, pending reservations, malformed schemas, release tampering, and actual STDIO MCP startup.
+- The initial 64 tests passed locally, including approval mutation/expiry/replay, timeout after acceptance, crash before recording, storage failure, concurrent dispatch lock, fill/cancel races, pending reservations, malformed schemas, release tampering, and actual STDIO MCP startup. Review added eight regression cases, bringing the suite to 72.
 - Ruff lint and formatting pass. Strict mypy passes for all 14 source modules. Coverage is informational; subprocess CLI tests are not counted in the parent coverage process. Broker login is not covered by these offline checks.
 - pip-audit found no known vulnerabilities in installed dependencies. Editable project code is excluded from this dependency advisory scan and reviewed separately.
 - Built the wheel and source archive, installed the wheel in a separate environment with locked runtime dependencies, and ran doctor/replay there. The synthetic fixture produces two shares and $979 fake cash from $1,000 after a $1 fee.
 - `codex mcp get personal_trading_paper --json` loads the intended command and five-tool allowlist. This installed alpha CLI rejects strict-config for MCP commands; no strict-mode or extension-permission verification is claimed.
 - GitHub GET confirms main and staging require quality, simulation, security, branch-flow, up-to-date branches, PRs, resolved conversations and administrator enforcement. Force push and deletion are disabled. Required outside approval count is zero for the solo owner.
+- GitHub native secret scanning and push protection are enabled; dependency alerts return HTTP 204 (enabled). Dependabot update PRs target staging and do not auto-merge.
 - A read-only workflow probe identified missing recovery/package instructions and status invalidating approvals. The guide now includes wheel-install commands, per-release manifest names and order history; the status regression is tested.
 
 ## Final review and promotion
 
-Pending independent whole-branch review, public feature push, and required CI. No Robinhood login, real account data, or real order has been used. No merge activates trading.
+Independent whole-branch review examined bootstrap `f18163b` through `ddad572`. No Critical or Minor findings were raised. Three Important findings were reproduced and fixed with failing-then-passing tests:
+
+- Credential-safe failure handling: malformed OAuth/transport exceptions no longer print rejected token values or raw response text. Regression: `test_discovery_errors_never_print_credentials`.
+- Offline schema resolution: reject external dynamic references and use an explicit non-retrieving registry for both inputs and outputs. Regression: `test_remote_schema_references_never_reach_network`.
+- Durable uncertainty blocking: unresolved ledger states block execution even if the halt write failed; an in-memory halt covers the existing process, and reconciliation preserves a durable halt until manual resume. Submission and cancellation regressions: `test_failed_uncertainty_write_blocks_existing_executor_until_manual_resume`.
+
+The first GitHub run passed simulation, security and branch-flow but failed Linux mypy because the platform guard made the Keychain backend type indeterminate. A typed backend factory fixes both Linux and macOS checks without changing the runtime guard or relaxing strict typing.
+
+- Final Ruling: authenticated OAuth interoperability, account eligibility, previews, and live execution remain outside offline review. They stay disabled pending connected certification; the cost is that this release cannot trade real money.
+- Final Ruling: remote protections/CI are verified by the primary implementer, since the reviewer had read-only local scope. No failed check will be bypassed.
+- Final Ruling: exchange realism remains limited to the documented simulator assumptions. Replay verifies this model and cannot establish real fill quality or performance.
+
+Feature PR: https://github.com/nexuslife42/trading-robinhood/pull/1. Required CI is rerun after the review fixes. No Robinhood login, real account data, or real order has been used. No merge activates trading.

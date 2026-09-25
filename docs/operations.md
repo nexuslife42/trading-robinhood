@@ -90,6 +90,8 @@ No workflow deploys or starts trading. A future activation requires the broker c
 
 The public repository requires PRs plus `quality`, `simulation`, `security`, and `branch-flow` on main and staging. Force pushes and deletion are disabled and admins are included. There is one human owner, so a separate mandatory reviewer count is zero; the owner still reviews and chooses each merge.
 
+GitHub native secret scanning, push protection, and dependency alerts are enabled in addition to CI scans. These detect supported patterns; they cannot guarantee that all private financial data will be recognized. Keep runtime data out of every commit. Configuration API: [repository security settings](https://docs.github.com/en/rest/repos/repos#update-a-repository).
+
 To reapply the stored branch policy after a deliberate configuration change:
 
 ```sh

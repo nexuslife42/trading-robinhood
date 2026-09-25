@@ -125,3 +125,29 @@ def test_official_oauth_destinations_and_callback_state():
         parse_callback("/callback?code=test-code&state=wrong", "expected")
     with pytest.raises(ValueError):
         parse_callback("/callback?code=one&code=two&state=expected", "expected")
+
+
+@pytest.mark.parametrize("side", ["input_schema", "output_schema"])
+@pytest.mark.parametrize("reference", ["$ref", "$dynamicRef"])
+def test_remote_schema_references_never_reach_network(monkeypatch, side, reference):
+    requests = []
+
+    def unexpected_fetch(*args, **kwargs):
+        requests.append(args)
+        raise AssertionError("Validation attempted network access")
+
+    monkeypatch.setattr("urllib.request.urlopen", unexpected_fetch)
+
+    async def scenario():
+        tool = TOOL.model_copy(
+            update={side: {"type": "object", reference: "https://example.invalid/schema"}}
+        )
+        session = Session(tools=[tool])
+        catalog = await Catalog.capture(session)
+        client = ReviewedMarketClient(session, {tool.name: catalog.signature(tool.name)})
+        with pytest.raises(GuardError):
+            await client.call(tool.name, {"symbols": ["SYNTH"]})
+        assert session.calls == []
+
+    asyncio.run(scenario())
+    assert requests == []

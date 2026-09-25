@@ -12,6 +12,8 @@ from mcp.types import (
     PaginatedRequestParams,
     Result,
 )
+from referencing import Registry
+from referencing.exceptions import Unresolvable
 
 from .models import digest
 
@@ -72,9 +74,10 @@ def sanitize(value: Any, depth: int = 0) -> Any:
 def check_schema(schema: dict[str, Any]) -> None:
     def visit(value: Any) -> None:
         if isinstance(value, dict):
-            reference = value.get("$ref", "")
-            if reference and not reference.startswith("#"):
-                raise GuardError("Remote schema references are forbidden")
+            for keyword in ("$ref", "$dynamicRef", "$recursiveRef"):
+                reference = value.get(keyword, "")
+                if not isinstance(reference, str) or (reference and not reference.startswith("#")):
+                    raise GuardError("Remote schema references are forbidden")
             for item in value.values():
                 visit(item)
         elif isinstance(value, list):
@@ -141,8 +144,9 @@ class ReviewedMarketClient:
         try:
             check_schema(tool["inputSchema"])
             check_schema(schema)
-            Draft202012Validator(tool["inputSchema"]).validate(arguments)
-        except (SchemaError, ValidationError) as exc:
+            # An explicit empty registry disables jsonschema's default remote retrieval.
+            Draft202012Validator(tool["inputSchema"], registry=Registry()).validate(arguments)
+        except (SchemaError, ValidationError, Unresolvable) as exc:
             raise GuardError("Tool arguments or schema failed validation") from exc
         result = await self.session.call_tool(name, arguments)
         if (
@@ -152,7 +156,7 @@ class ReviewedMarketClient:
         ):
             raise GuardError("Tool response is an error or lacks structured data")
         try:
-            Draft202012Validator(schema).validate(result.structured_content)
-        except ValidationError as exc:
+            Draft202012Validator(schema, registry=Registry()).validate(result.structured_content)
+        except (ValidationError, Unresolvable) as exc:
             raise GuardError("Tool response failed validation") from exc
         return sanitize(result.structured_content)

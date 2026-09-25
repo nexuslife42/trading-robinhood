@@ -17,6 +17,7 @@ __all__ = ["ExecutionError", "Executor"]
 class Executor:
     def __init__(self, state: State, broker: BrokerAdapter, policy: Policy, *, release: str):
         self.state, self.broker, self.policy, self.release = state, broker, policy, release
+        self._halted = False
         if broker.mode != policy.mode:
             raise ExecutionError("Broker mode does not match policy")
         # A crash may have happened after the network accepted an order.
@@ -32,7 +33,7 @@ class Executor:
                 state.set_halt(True)
 
     def _running(self) -> None:
-        if self.state.halted:
+        if self._halted or self.state.halted:
             raise ExecutionError("Trading halted; reconcile before manual resume")
 
     def _check(self, intent: OrderIntent, now: datetime) -> Preview:
@@ -183,6 +184,8 @@ class Executor:
             self.state.event(key, result.status, now)
 
     def _unknown(self, key: str, now: datetime) -> None:
+        # Preserve the halt in this process even when disk writes cannot record it.
+        self._halted = True
         with self.state.transaction():
             self.state.set_halt(True)
             self.state.connection.execute(
@@ -195,6 +198,10 @@ class Executor:
             row = self.state.get_order(key)
             if not row["submitted_at"]:
                 raise ExecutionError("Order has not been submitted")
+            if self._halted or self.state.halted:
+                # Once storage recovers, preserve the halt through reconciliation and restart.
+                with self.state.transaction():
+                    self.state.set_halt(True)
             try:
                 result = self.broker.lookup(key, now)
                 self._record(key, result, now)
@@ -222,6 +229,7 @@ class Executor:
                 raise ExecutionError("Cancellation outcome unknown; reconcile") from exc
 
     def halt(self, reason: str, now: datetime) -> None:
+        self._halted = True
         with self.state.lock(), self.state.transaction():
             self.state.set_halt(True)
             self.state.connection.execute(
@@ -238,3 +246,4 @@ class Executor:
                 raise ExecutionError("Cannot resume with unresolved orders")
             self.state.set_halt(False)
             self.state.event(None, "resumed", now)
+        self._halted = False

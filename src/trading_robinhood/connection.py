@@ -5,13 +5,14 @@ import hmac
 import json
 import sys
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
+from keyring.backend import KeyringBackend
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.streamable_http import streamable_http_client
@@ -67,12 +68,15 @@ def parse_callback(path: str, expected_state: str) -> AuthorizationCodeResult:
 
 
 class KeychainStore:
+    backend: KeyringBackend
+
     def __init__(self) -> None:
         if sys.platform != "darwin":
             raise ValueError("Broker credentials require macOS Keychain; no file fallback")
         from keyring.backends.macOS import Keyring
 
-        self.backend = Keyring()  # type: ignore[no-untyped-call]
+        create_backend: Callable[[], KeyringBackend] = Keyring
+        self.backend = create_backend()
 
     async def get_tokens(self) -> OAuthToken | None:
         value = self.backend.get_password(SERVICE, "tokens")

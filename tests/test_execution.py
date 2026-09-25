@@ -204,3 +204,41 @@ def test_restart_invalidates_unused_approvals(rig):
     with pytest.raises(ExecutionError, match="approval"):
         restarted.execute(key, NOW)
     assert broker.orders() == []
+
+
+@pytest.mark.parametrize("operation", ["submit", "cancel"])
+def test_failed_uncertainty_write_blocks_existing_executor_until_manual_resume(rig, operation):
+    state, broker, executor = rig
+    first = prepare(executor)
+    second = prepare(executor, order(request_id="22222222-2222-4222-8222-222222222222"))
+    if operation == "cancel":
+        executor.execute(first, NOW)
+    original = getattr(broker, operation)
+
+    def accept_then_break_persistence(*args):
+        result = original(*args)
+        state.connection.execute(
+            "CREATE TEMP TRIGGER fail_event BEFORE INSERT ON events "
+            "BEGIN SELECT RAISE(FAIL, 'disk write unavailable'); END"
+        )
+        return result
+
+    setattr(broker, operation, accept_then_break_persistence)
+    with pytest.raises((sqlite3.Error, ExecutionError)):
+        if operation == "submit":
+            executor.execute(first, NOW)
+        else:
+            executor.cancel(first, NOW)
+    state.connection.execute("DROP TRIGGER fail_event")
+    setattr(broker, operation, original)
+    assert state.get_order(first)["status"] in ("submitting", "cancel_pending")
+    assert state.halted  # The durable unresolved status blocks every process.
+    with pytest.raises(ExecutionError, match="halted|unresolved"):
+        executor.execute(second, NOW)
+    executor.reconcile(first, NOW)
+    assert state.halted  # Reconciliation must not erase the halt across a later restart.
+    with pytest.raises(ExecutionError, match="halted|unresolved"):
+        executor.execute(second, NOW)
+    executor.resume(NOW)
+    executor.execute(second, NOW)
+    assert len(broker.orders()) == 2

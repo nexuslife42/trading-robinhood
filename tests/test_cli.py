@@ -3,8 +3,11 @@ import subprocess
 import sys
 from decimal import Decimal
 
+import pytest
+from mcp.shared.auth import OAuthToken
 from test_policy import NOW, order, policy, quote
 
+from trading_robinhood import cli, connection
 from trading_robinhood.execution import Executor
 from trading_robinhood.paper import PaperBroker
 from trading_robinhood.state import State
@@ -65,3 +68,20 @@ def test_status_and_backup_preserve_approval_and_halt_state(tmp_path):
         assert state.get_order(key) == before
         assert not state.halted
     state.close()
+
+
+@pytest.mark.parametrize("failure", ["malformed_token", "transport"])
+def test_discovery_errors_never_print_credentials(tmp_path, monkeypatch, capsys, failure):
+    async def fail_discovery():
+        if failure == "malformed_token":
+            return OAuthToken.model_validate({"refresh_token": "SYNTHETIC-PRIVATE-VALUE"})
+        raise RuntimeError("transport response SYNTHETIC-PRIVATE-VALUE")
+
+    monkeypatch.setattr(connection, "discover", fail_discovery)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    destination = tmp_path / "catalog.json"
+    assert cli.main(["broker-discover", "--connect", "--output", str(destination)]) == 1
+    captured = capsys.readouterr()
+    assert "SYNTHETIC-PRIVATE-VALUE" not in captured.out + captured.err
+    assert "Broker discovery failed" in captured.err
+    assert not destination.exists()

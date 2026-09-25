@@ -82,7 +82,10 @@ class State:
     @property
     def halted(self) -> bool:
         row = self.connection.execute("SELECT value FROM settings WHERE key='halted'").fetchone()
-        return row is None or row[0] != "false"
+        unresolved = self.connection.execute(
+            "SELECT 1 FROM orders WHERE status IN ('submitting','unknown','cancel_pending') LIMIT 1"
+        ).fetchone()
+        return row is None or row[0] != "false" or unresolved is not None
 
     def set_halt(self, halted: bool) -> None:
         self.connection.execute(
