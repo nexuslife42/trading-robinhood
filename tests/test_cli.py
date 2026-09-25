@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
@@ -10,7 +11,7 @@ from test_policy import NOW, order, policy, quote
 from trading_robinhood import cli, connection
 from trading_robinhood.execution import Executor
 from trading_robinhood.paper import PaperBroker
-from trading_robinhood.state import State
+from trading_robinhood.state import ExecutionError, State
 
 
 def run_cli(*args):
@@ -68,6 +69,110 @@ def test_status_and_backup_preserve_approval_and_halt_state(tmp_path):
         assert state.get_order(key) == before
         assert not state.halted
     state.close()
+
+
+@pytest.mark.parametrize("submitted", [False, True])
+def test_paper_tick_updates_only_submitted_orders_and_preserves_halt(tmp_path, submitted):
+    path = tmp_path / "paper.db"
+    state = State(path)
+    broker = PaperBroker(state, account="paper", cash=Decimal("1000"), fee=Decimal("1"))
+    broker.set_quote(quote())
+    executor = Executor(state, broker, policy(), release="test")
+    key = executor.propose(order(), NOW)
+    if submitted:
+        executor.approve(key, NOW)
+        executor.execute(key, NOW)
+    executor.halt("test", NOW)
+    tick = tmp_path / "tick.json"
+    for second, expected_cash, expected_status in [(1, "989", "partial"), (2, "979", "filled")]:
+        tick.write_text(
+            json.dumps(
+                {
+                    "at": (NOW + timedelta(seconds=second)).isoformat(),
+                    "instrument": "SYNTH",
+                    "bid": "9",
+                    "ask": "10",
+                    "liquidity": "1",
+                }
+            )
+        )
+        result = run_cli("paper-tick", str(tick), "--state", str(path))
+        assert result.returncode == 0, result.stderr
+        output = json.loads(result.stdout)
+        assert output["mode"] == "paper"
+        assert state.halted
+        row = state.get_order(key)
+        if submitted:
+            assert row["status"] == expected_status
+            assert row["filled_quantity"] == str(second)
+            assert output["portfolio"]["buying_power"] == expected_cash
+            assert output["portfolio"]["positions"] == {"SYNTH": str(second)}
+        else:
+            assert row["status"] == "proposed"
+            assert row["approval"] is None
+            assert output["portfolio"]["buying_power"] == "1000"
+            assert output["portfolio"]["positions"] == {}
+    if submitted:
+        assert [event["kind"] for event in state.events(key)][-2:] == ["partial", "filled"]
+    state.close()
+
+
+@pytest.mark.parametrize("liquidity", ["-1", "NaN", 1.5])
+def test_paper_tick_rejects_invalid_liquidity_without_loading_quote(tmp_path, liquidity):
+    path = tmp_path / "paper.db"
+    tick = tmp_path / "tick.json"
+    tick.write_text(
+        json.dumps(
+            {
+                "at": NOW.isoformat(),
+                "instrument": "SYNTH",
+                "bid": "9",
+                "ask": "10",
+                "liquidity": liquidity,
+            }
+        )
+    )
+    result = run_cli("paper-tick", str(tick), "--state", str(path))
+    assert result.returncode == 1
+    state = State(path)
+    assert state.connection.execute("SELECT COUNT(*) FROM paper_quotes").fetchone()[0] == 0
+    state.close()
+
+
+def test_paper_tick_requires_explicit_ledger(tmp_path):
+    result = run_cli("paper-tick", str(tmp_path / "tick.json"))
+    assert result.returncode == 2
+    assert "--state" in result.stderr
+
+
+def test_paper_tick_keeps_ledger_locked_until_portfolio_is_captured(tmp_path, monkeypatch):
+    path = tmp_path / "paper.db"
+    tick = tmp_path / "tick.json"
+    tick.write_text(
+        json.dumps(
+            {
+                "at": NOW.isoformat(),
+                "instrument": "SYNTH",
+                "bid": "9",
+                "ask": "10",
+                "liquidity": "1",
+            }
+        )
+    )
+    snapshot = PaperBroker.snapshot
+
+    def competing_snapshot(broker, now):
+        competitor = State(path)
+        try:
+            with pytest.raises(ExecutionError, match="busy"):
+                with competitor.lock():
+                    pass
+        finally:
+            competitor.close()
+        return snapshot(broker, now)
+
+    monkeypatch.setattr(PaperBroker, "snapshot", competing_snapshot)
+    assert cli.main(["paper-tick", str(tick), "--state", str(path)]) == 0
 
 
 @pytest.mark.parametrize("failure", ["malformed_token", "transport"])
