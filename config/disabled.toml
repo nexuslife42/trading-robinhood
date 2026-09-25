@@ -1,0 +1,9 @@
+version = "1"
+mode = "paper"
+live_enabled = false
+accounts = []
+instruments = []
+max_order_value = "0"
+max_daily_value = "0"
+max_daily_orders = 0
+max_open_orders = 0

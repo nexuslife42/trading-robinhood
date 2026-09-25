@@ -1,0 +1,11 @@
+# Project-local development settings. Global tools can still be inherited.
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+approvals_reviewer = "user"
+
+[mcp_servers.personal_trading_paper]
+command = "uv"
+args = ["run", "--locked", "--offline", "rh", "serve"]
+enabled_tools = ["foundation_status", "paper_portfolio", "propose_paper_order", "paper_order_status", "halt_paper"]
+default_tools_approval_mode = "prompt"
+tool_timeout_sec = 15

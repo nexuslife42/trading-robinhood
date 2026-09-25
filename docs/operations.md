@@ -1,0 +1,105 @@
+# Operator and release guide
+
+All executable order commands in this version operate on simulated money. `rh live` is intentionally unavailable. Do not change that rejection to make a check pass.
+
+## Normal checks
+
+```sh
+uv sync --locked
+make check
+make replay
+make audit
+make secrets
+make build
+```
+
+CI runs the same quality, simulation and security checks. It never receives Robinhood credentials. A green replay means the software matched the test's assumptions, not that a strategy would make money.
+
+## Paper operator workflow
+
+Use one explicit ledger path throughout an exercise. Load a JSON Quote using `uv run rh quote quote.json --state .state/paper.sqlite3`; its timestamp must be current UTC. Propose an OrderIntent with `uv run rh propose order.json --state .state/paper.sqlite3 --policy config/paper.toml`. The example policy accepts only the synthetic SYNTH instrument.
+
+```sh
+uv run rh approve-execute ORDER_ID --state .state/paper.sqlite3 --policy config/paper.toml
+uv run rh status --state .state/paper.sqlite3
+```
+
+Approval requires an interactive terminal and typing the displayed order ID and digest. It covers the exact proposal, preview, policy, and release, expires after 60 seconds by default, and is consumed before submission. It cannot be piped in or supplied as an agent tool. Starting a new executor clears unused approvals. Use the replay harness to advance fake market ticks and verify fills; the interactive commands do not fetch live quotes or run a background market feed.
+
+Status, history, and backup commands preserve existing approvals and halt state. They do not start an executor or reconcile orders.
+
+## Timeout or crash
+
+Keep the original request ID and ledger. Never create another request to retry an uncertain submission.
+
+```sh
+uv run rh halt --state .state/paper.sqlite3
+uv run rh status --state .state/paper.sqlite3
+uv run rh history ORDER_ID --state .state/paper.sqlite3
+uv run rh reconcile ORDER_ID --state .state/paper.sqlite3 --policy config/paper.toml
+```
+
+`unknown`, `submitting`, and `cancel_pending` retain reservations and prevent resume. Reconciliation does not automatically clear the halt. For paper state, inspect the original simulator ledger and the event trail. If the original record is absent or damaged, leave it halted and preserve a backup; do not manufacture a terminal status. Start a separate, clearly new paper exercise only after preserving the old evidence. A future real broker adapter must resolve this with the broker's authoritative history or support, not manual SQL guesses.
+
+After every unresolved order is reconciled and the operator decides to continue:
+
+```sh
+uv run rh resume --state .state/paper.sqlite3
+```
+
+Halt blocks new orders; it does not cancel working orders or undo trades. To cancel a known open paper order, run `uv run rh cancel ORDER_ID` with the same state and policy. Always inspect the returned status: a fill can win the race.
+
+## Backup and restore
+
+```sh
+uv run rh backup .state/paper-backup.sqlite3 --state .state/paper.sqlite3
+```
+
+Use a new destination each time. Keep backups encrypted and outside Git. Stop the MCP server and every operator process before restoring. Preserve the damaged database and its WAL/SHM sidecars as evidence. Restore a backup to a **new ledger path**, run `uv run rh halt --state NEW_PATH`, inspect status, and reconcile every submitted order before considering resume. Never roll back only the ledger while keeping a newer broker or simulator state.
+
+## Release promotion
+
+1. Open a topic PR into staging. Inspect the change and run all required checks. Merge only after they pass.
+2. Open staging → main. The merge candidate must pass all four checks again. Resolve review findings before merging.
+
+Because main receives a merge commit, later topic branches must also merge the latest `origin/main` before their staging PR (see README). If a release PR is behind main, create `chore/sync-main` from current staging, merge `origin/main`, and submit that branch through the normal staging checks. Do not weaken the up-to-date gate or force-push staging.
+
+3. Check out the exact main commit in a clean workspace. Build and smoke-test the wheel with locked runtime dependencies in a separate environment:
+
+```sh
+mkdir -p artifacts
+uv build --no-sources
+uv export --locked --no-dev --no-emit-project --output-file artifacts/runtime-requirements.txt
+uv venv .runtime/release --python 3.13
+uv pip sync --python .runtime/release/bin/python artifacts/runtime-requirements.txt
+uv pip install --python .runtime/release/bin/python --no-deps dist/trading_robinhood-0.1.0-py3-none-any.whl
+.runtime/release/bin/rh doctor
+.runtime/release/bin/rh replay examples/synthetic-replay.json
+shasum -a 256 dist/trading_robinhood-0.1.0-py3-none-any.whl
+```
+
+Use the actual wheel version if it changes. Keep the checksum and CI evidence with the release record. Then create a manifest using the intended policy and a fresh filename (replace `RELEASE_ID` with the commit ID):
+
+```sh
+uv run rh release-manifest artifacts/RELEASE_ID-manifest.json --root . --policy config/disabled.toml
+uv run rh verify-release artifacts/RELEASE_ID-manifest.json --root . --policy config/disabled.toml
+```
+
+The manifest records exact file hashes, source commit and policy identity. It is not signed, does not itself run tests, and never grants trading authority. Link the commit's successful CI run and built artifact checksum in the release record. Do not claim verification for a different commit, policy, package or dataset. Keep the same built artifact for later deployment; never run a moving branch head as a live release.
+
+No workflow deploys or starts trading. A future activation requires the broker contract and account gates to be implemented and certified. Code rollback also requires halting and reconciling existing orders first; it cannot undo a filled order.
+
+## GitHub gates
+
+The public repository requires PRs plus `quality`, `simulation`, `security`, and `branch-flow` on main and staging. Force pushes and deletion are disabled and admins are included. There is one human owner, so a separate mandatory reviewer count is zero; the owner still reviews and chooses each merge.
+
+GitHub native secret scanning, push protection, and dependency alerts are enabled in addition to CI scans. These detect supported patterns; they cannot guarantee that all private financial data will be recognized. Keep runtime data out of every commit. Configuration API: [repository security settings](https://docs.github.com/en/rest/repos/repos#update-a-repository).
+
+To reapply the stored branch policy after a deliberate configuration change:
+
+```sh
+gh api --method PUT repos/nexuslife42/trading-robinhood/branches/staging/protection --input config/branch-protection.json
+gh api --method PUT repos/nexuslife42/trading-robinhood/branches/main/protection --input config/branch-protection.json
+```
+
+Do not use admin bypass or disable checks to merge. Confirm remote protection with the corresponding GET endpoints before calling a release protected.

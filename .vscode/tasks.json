@@ -1,0 +1,11 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {"label": "Foundation: doctor", "type": "process", "command": "uv", "args": ["run", "--locked", "rh", "doctor"], "problemMatcher": []},
+    {"label": "Foundation: tests", "type": "process", "command": "uv", "args": ["run", "--locked", "pytest"], "group": {"kind": "test", "isDefault": true}, "problemMatcher": []},
+    {"label": "Foundation: lint", "type": "process", "command": "uv", "args": ["run", "--locked", "ruff", "check", "."], "problemMatcher": []},
+    {"label": "Foundation: types", "type": "process", "command": "uv", "args": ["run", "--locked", "mypy"], "problemMatcher": []},
+    {"label": "Foundation: replay", "type": "process", "command": "uv", "args": ["run", "--locked", "rh", "replay", "examples/synthetic-replay.json"], "problemMatcher": []},
+    {"label": "Foundation: paper status", "type": "process", "command": "uv", "args": ["run", "--locked", "rh", "status"], "problemMatcher": []}
+  ]
+}
