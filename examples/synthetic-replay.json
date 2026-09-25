@@ -1,0 +1,14 @@
+{
+  "metadata": {
+    "source": "synthetic", "license": "project-owned", "timezone": "UTC",
+    "adjustments": "none", "asset_class": "equity", "corporate_actions": "none", "synthetic": true
+  },
+  "ticks": [
+    {"at": "2026-09-24T14:00:00Z", "instrument": "SYNTH", "bid": "9", "ask": "10", "liquidity": "1"},
+    {"at": "2026-09-24T14:01:00Z", "instrument": "SYNTH", "bid": "9", "ask": "10", "liquidity": "1"},
+    {"at": "2026-09-24T14:02:00Z", "instrument": "SYNTH", "bid": "9", "ask": "10", "liquidity": "1"}
+  ],
+  "orders": [
+    {"at": "2026-09-24T14:00:00Z", "request_id": "11111111-1111-4111-8111-111111111111", "account": "paper", "instrument": "SYNTH", "side": "buy", "quantity": "2", "limit_price": "10"}
+  ]
+}

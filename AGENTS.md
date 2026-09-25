@@ -2,6 +2,8 @@
 
 Build a personal Robinhood trading framework, not trading strategies. The owner uses this workspace and macOS user; do not add another account, VM, or cloud runtime.
 
+Explain changes in plain, concise language. Make the smallest complete change; preserve unrelated work. Investigate failures before fixing them, and state material limits and unverified behavior. The repository is public by the owner's explicit choice; treat every tracked file and its full history as public.
+
 ## Safety invariants
 
 - Live trading is disabled by default and must stay disabled until authenticated broker contracts, release checks, account eligibility, and explicit operator authorization are verified.
