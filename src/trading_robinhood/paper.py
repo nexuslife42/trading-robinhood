@@ -138,9 +138,20 @@ class PaperBroker:
     def advance(self, quote: Quote, liquidity: Decimal) -> list[OrderResult]:
         if not liquidity.is_finite() or liquidity < 0:
             raise ValueError("Invalid liquidity")
-        self.set_quote(quote)
         results: list[OrderResult] = []
         with self.state.transaction():
+            tick_key = f"paper_tick:{quote.instrument}"
+            previous = self.state.connection.execute(
+                "SELECT value FROM settings WHERE key=?", (tick_key,)
+            ).fetchone()
+            if previous and quote.observed_at <= datetime.fromisoformat(previous[0]):
+                raise ValueError("Tick time must increase; repeated or older ticks are rejected")
+            # Commit the tick marker with its fills so retries cannot create more liquidity.
+            self.set_quote(quote)
+            self.state.connection.execute(
+                "INSERT OR REPLACE INTO settings VALUES (?,?)",
+                (tick_key, quote.observed_at.astimezone(UTC).isoformat()),
+            )
             cash, positions = self._balances()
             for row in self.orders():
                 intent = OrderIntent.model_validate_json(row["intent"])

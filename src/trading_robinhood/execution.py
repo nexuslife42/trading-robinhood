@@ -7,7 +7,8 @@ from decimal import Decimal
 from typing import Any
 
 from .broker import BrokerAdapter
-from .models import OrderIntent, OrderResult, Policy, Preview, aware, digest
+from .models import AccountSnapshot, OrderIntent, OrderResult, Policy, Preview, Quote, aware, digest
+from .paper import PaperBroker
 from .policy import evaluate
 from .state import ExecutionError, State, encode
 
@@ -195,20 +196,38 @@ class Executor:
 
     def reconcile(self, key: str, now: datetime) -> OrderResult:
         with self.state.lock():
-            row = self.state.get_order(key)
-            if not row["submitted_at"]:
-                raise ExecutionError("Order has not been submitted")
-            if self._halted or self.state.halted:
-                # Once storage recovers, preserve the halt through reconciliation and restart.
-                with self.state.transaction():
-                    self.state.set_halt(True)
-            try:
-                result = self.broker.lookup(key, now)
-                self._record(key, result, now)
-                return result
-            except Exception as exc:
-                self._unknown(key, now)
-                raise ExecutionError("Reconciliation failed; order remains unresolved") from exc
+            return self._reconcile(key, now)
+
+    def _reconcile(self, key: str, now: datetime) -> OrderResult:
+        """Reconcile while the caller holds the ledger lock."""
+        row = self.state.get_order(key)
+        if not row["submitted_at"]:
+            raise ExecutionError("Order has not been submitted")
+        if self._halted or self.state.halted:
+            # Once storage recovers, preserve the halt through reconciliation and restart.
+            with self.state.transaction():
+                self.state.set_halt(True)
+        try:
+            result = self.broker.lookup(key, now)
+            self._record(key, result, now)
+            return result
+        except Exception as exc:
+            self._unknown(key, now)
+            raise ExecutionError("Reconciliation failed; order remains unresolved") from exc
+
+    def advance_paper(
+        self, quote: Quote, liquidity: Decimal
+    ) -> tuple[list[OrderResult], AccountSnapshot]:
+        """Serialize one synthetic tick, its history updates, and its balance report."""
+        if not isinstance(self.broker, PaperBroker):
+            raise ExecutionError("Synthetic ticks require the paper simulator")
+        with self.state.lock():
+            results = self.broker.advance(quote, liquidity)
+            # Halt blocks new submissions, not fills of previously submitted orders.
+            # After an interrupted tick, reconcile the persisted simulator state.
+            for result in results:
+                self._reconcile(result.broker_id.removeprefix("paper-"), quote.observed_at)
+            return results, self.broker.snapshot(quote.observed_at)
 
     def cancel(self, key: str, now: datetime) -> OrderResult:
         with self.state.lock():
